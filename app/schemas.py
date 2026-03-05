@@ -3,6 +3,7 @@
 from datetime import datetime
 from typing import Any, Dict, Optional, Literal
 
+
 from pydantic import BaseModel, ConfigDict, computed_field
 
 
@@ -118,3 +119,21 @@ class IOCEnrichmentOut(BaseModel):
         if self.verdict == "suspicious":
             return f"{subject} appears suspicious (score {score}, reports {reports}). Correlate with logs before action."
         return f"{subject} appears benign (score {score}, reports {reports}). Monitor if seen in suspicious context."
+    
+    # --- Logs (Phase 5) ---
+
+from typing import List
+
+class LogIngest(BaseModel):
+    source: str = "apache"
+    lines: List[str]
+
+class LogOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    id: int
+    timestamp: datetime
+    source: Optional[str] = None
+    message: str
+    parsed_ip: Optional[str] = None
+    event_type: Optional[str] = None

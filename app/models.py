@@ -25,17 +25,6 @@ class LogEvent(Base):
     parsed_ip = Column(Text, nullable=True, index=True)
     event_type = Column(Text, nullable=True, index=True)
 
-
-class Alert(Base):
-    __tablename__ = "alerts"
-
-    id = Column(Integer, primary_key=True, index=True)
-    rule_name = Column(Text, nullable=False)
-    severity = Column(String(10), nullable=False)             # low/medium/high
-    log_id = Column(Integer, ForeignKey("logs.id"), nullable=True)
-    ioc_id = Column(Integer, ForeignKey("iocs.id"), nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
-
 class CVE(Base):
     __tablename__ = "cves"
 
@@ -79,3 +68,14 @@ class IOCEnrichment(Base):
     raw_json = Column(JSONB, nullable=True)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class Alert(Base):
+    __tablename__ = "alerts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    log_id = Column(Integer, ForeignKey("logs.id"), nullable=True)
+    ioc_id = Column(Integer, ForeignKey("iocs.id"), nullable=True)
+
+    alert_type = Column(String, nullable=False)   # "IOC_MATCH"
+    severity = Column(String, default="medium")
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
