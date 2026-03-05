@@ -9,8 +9,11 @@ from app.feeds.abuseipdb import check_ip
 
 router = APIRouter()
 
+PROVIDER = "abuseipdb"
+
 
 def _parse_iso_dt(s: str | None):
+    """Parse an ISO8601 datetime string safely (handles trailing Z)."""
     if not s:
         return None
     try:
@@ -21,32 +24,36 @@ def _parse_iso_dt(s: str | None):
 
 @router.post("/iocs/{ioc_id}/enrich", response_model=IOCEnrichmentOut)
 def enrich_ioc(ioc_id: int, db: Session = Depends(get_db)):
+    # 1) Confirm IOC exists
     ioc = db.query(IOC).filter(IOC.id == ioc_id).first()
     if not ioc:
         raise HTTPException(status_code=404, detail="IOC not found")
 
-    if ioc.type != "ip":
-        raise HTTPException(status_code=400, detail="AbuseIPDB enrichment only supports IP-type IOCs")
+    # 2) Confirm type is supported
+    if (ioc.type or "").lower() != "ip":
+        raise HTTPException(
+            status_code=400,
+            detail=f"{PROVIDER} enrichment only supports IP-type IOCs"
+        )
 
-    #call AbuseIPDB INSIDE the function
+    # 3) Call AbuseIPDB
     try:
         data = check_ip(ioc.value)
     except Exception as e:
-        raise HTTPException(status_code=502, detail=f"AbuseIPDB lookup failed: {str(e)}")
+        raise HTTPException(status_code=502, detail=f"{PROVIDER} lookup failed: {str(e)}")
 
-    provider = "abuseipdb"
-
-    # Upsert one row per IOC + provider
+    # 4) Upsert one row per IOC + provider
     row = (
         db.query(IOCEnrichment)
-        .filter(IOCEnrichment.ioc_id == ioc_id, IOCEnrichment.provider == provider)
+        .filter(IOCEnrichment.ioc_id == ioc_id, IOCEnrichment.provider == PROVIDER)
         .first()
     )
 
     if row is None:
-        row = IOCEnrichment(ioc_id=ioc_id, provider=provider)
+        row = IOCEnrichment(ioc_id=ioc_id, provider=PROVIDER)
         db.add(row)
 
+    # 5) Map fields from provider response
     row.score = data.get("abuseConfidenceScore")
     row.total_reports = data.get("totalReports")
     row.country_code = data.get("countryCode")
@@ -63,11 +70,21 @@ def enrich_ioc(ioc_id: int, db: Session = Depends(get_db)):
 
 @router.get("/iocs/{ioc_id}/enrichment", response_model=IOCEnrichmentOut)
 def get_ioc_enrichment(ioc_id: int, db: Session = Depends(get_db)):
+    # SOC-friendly: distinguish "bad IOC id" vs "not enriched yet"
+    ioc = db.query(IOC).filter(IOC.id == ioc_id).first()
+    if not ioc:
+        raise HTTPException(status_code=404, detail="IOC not found")
+
     row = (
         db.query(IOCEnrichment)
-        .filter(IOCEnrichment.ioc_id == ioc_id, IOCEnrichment.provider == "abuseipdb")
+        .filter(IOCEnrichment.ioc_id == ioc_id, IOCEnrichment.provider == PROVIDER)
         .first()
     )
+
     if not row:
-        raise HTTPException(status_code=404, detail="No enrichment found for this IOC")
+        raise HTTPException(
+            status_code=404,
+            detail=f"IOC exists but has no {PROVIDER} enrichment yet. Run POST /api/iocs/{ioc_id}/enrich"
+        )
+
     return row

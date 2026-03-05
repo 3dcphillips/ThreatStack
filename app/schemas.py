@@ -1,49 +1,60 @@
-from pydantic import BaseModel, Field
-from datetime import datetime, date
-from typing import Optional, Literal, Any, Dict
+# app/schemas.py
 
-IOCType = Literal["ip", "domain", "hash"]
+from datetime import datetime
+from typing import Any, Dict, Optional, Literal
+
+from pydantic import BaseModel, ConfigDict, computed_field
+
+
+# -----------------------------
+# IOC Schemas (needed by iocs.py)
+# -----------------------------
 
 class IOCCreate(BaseModel):
-    value: str = Field(..., min_length=1, max_length=500)
-    type: IOCType
-    source: str = Field(..., min_length=1, max_length=200)
-    confidence: int = Field(50, ge=0, le=100)
+    value: str
+    type: str
+    source: Optional[str] = "manual"
 
 
 class IOCOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     value: str
-    type: IOCType
-    source: str
-    confidence: int
+    type: str
+    source: Optional[str] = None
+    confidence: Optional[int] = None
     first_seen: Optional[datetime] = None
     last_seen: Optional[datetime] = None
-
-    class Config:
-        from_attributes = True
+    created_at: Optional[datetime] = None
 
 class CVEOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     cve_id: str
-    vendor_project: Optional[str] = None
-    product: Optional[str] = None
-    vulnerability_name: Optional[str] = None
-    date_added: Optional[date] = None
-    short_description: Optional[str] = None
-    required_action: Optional[str] = None
-    due_date: Optional[date] = None
-    known_ransomware_campaign_use: Optional[str] = None
-    notes: Optional[str] = None
-    source: str
+    description: Optional[str] = None
+    severity: Optional[str] = None
+    published_at: Optional[datetime] = None
+    modified_at: Optional[datetime] = None
+    created_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+
+# -------------------------------------
+# Enrichment Schemas (SOC/Analyst polish)
+# -------------------------------------
+
+Verdict = Literal["benign", "suspicious", "malicious"]
+Severity = Literal["low", "medium", "high"]
+
 
 class IOCEnrichmentOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     id: int
     ioc_id: int
     provider: str
+
     score: Optional[int] = None
     total_reports: Optional[int] = None
     country_code: Optional[str] = None
@@ -54,5 +65,56 @@ class IOCEnrichmentOut(BaseModel):
     raw_json: Optional[Dict[str, Any]] = None
     created_at: Optional[datetime] = None
 
-    class Config:
-        from_attributes = True
+    # ---------- SOC-friendly computed fields ----------
+
+    @computed_field
+    @property
+    def is_whitelisted(self) -> bool:
+        if not self.raw_json:
+            return False
+        return bool(self.raw_json.get("isWhitelisted", False))
+
+    @computed_field
+    @property
+    def verdict(self) -> Verdict:
+        score = int(self.score or 0)
+
+        if self.is_whitelisted and score <= 10:
+            return "benign"
+        if score >= 75:
+            return "malicious"
+        if score >= 25:
+            return "suspicious"
+        return "benign"
+
+    @computed_field
+    @property
+    def severity(self) -> Severity:
+        v = self.verdict
+        if v == "malicious":
+            return "high"
+        if v == "suspicious":
+            return "medium"
+        return "low"
+
+    @computed_field
+    @property
+    def summary(self) -> str:
+        score = int(self.score or 0)
+        reports = int(self.total_reports or 0)
+
+        subject = "IOC"
+        if self.raw_json:
+            subject = self.raw_json.get("ipAddress") or self.raw_json.get("domain") or subject
+
+        if self.is_whitelisted:
+            return (
+                f"{subject} is marked whitelisted by provider; "
+                f"score {score}, reports {reports}. Treat as benign unless incident context indicates otherwise."
+            )
+
+        if self.verdict == "malicious":
+            return f"{subject} appears malicious (score {score}, reports {reports}). Investigate activity and block if confirmed."
+        if self.verdict == "suspicious":
+            return f"{subject} appears suspicious (score {score}, reports {reports}). Correlate with logs before action."
+        return f"{subject} appears benign (score {score}, reports {reports}). Monitor if seen in suspicious context."

@@ -1,3 +1,4 @@
+# app/crud.py
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 from app.models import IOC
@@ -7,9 +8,9 @@ from app.schemas import IOCCreate
 def create_ioc(db: Session, ioc: IOCCreate) -> IOC:
     obj = IOC(
         value=ioc.value.strip(),
-        type=ioc.type,
-        source=ioc.source.strip(),
-        confidence=ioc.confidence,
+        type=ioc.type.strip(),
+        source=(ioc.source or "manual").strip(),
+        confidence=50,  # default system confidence
     )
     db.add(obj)
     db.commit()
