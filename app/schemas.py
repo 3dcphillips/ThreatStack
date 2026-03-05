@@ -1,6 +1,6 @@
 from pydantic import BaseModel, Field
 from datetime import datetime, date
-from typing import Optional, Literal
+from typing import Optional, Literal, Any, Dict
 
 IOCType = Literal["ip", "domain", "hash"]
 
@@ -36,6 +36,23 @@ class CVEOut(BaseModel):
     known_ransomware_campaign_use: Optional[str] = None
     notes: Optional[str] = None
     source: str
+
+    class Config:
+        from_attributes = True
+
+class IOCEnrichmentOut(BaseModel):
+    id: int
+    ioc_id: int
+    provider: str
+    score: Optional[int] = None
+    total_reports: Optional[int] = None
+    country_code: Optional[str] = None
+    isp: Optional[str] = None
+    domain: Optional[str] = None
+    usage_type: Optional[str] = None
+    last_reported_at: Optional[datetime] = None
+    raw_json: Optional[Dict[str, Any]] = None
+    created_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True

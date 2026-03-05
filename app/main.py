@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from app.routers import iocs, logs, alerts, cves, enrich
+from app.routers import enrichment
 
 app = FastAPI(
     title="ThreatStack",
@@ -13,6 +14,7 @@ app.include_router(logs.router, prefix="/api", tags=["logs"])
 app.include_router(alerts.router, prefix="/api", tags=["alerts"])
 app.include_router(cves.router, prefix="/api", tags=["cves"])
 app.include_router(enrich.router, prefix="/api", tags=["enrich"])
+app.include_router(enrichment.router, prefix="/api", tags=["enrichment"])
 
 @app.get("/")
 def root():

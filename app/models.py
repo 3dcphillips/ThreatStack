@@ -1,5 +1,6 @@
 from sqlalchemy import Column, Integer, String, Text, DateTime, Date, ForeignKey, func
 from app.database import Base
+from sqlalchemy.dialects.postgresql import JSONB
 
 
 class IOC(Base):
@@ -56,3 +57,25 @@ class CVE(Base):
         server_default=func.now(),
         onupdate=func.now()
     )
+
+class IOCEnrichment(Base):
+    __tablename__ = "ioc_enrichment"
+
+    id = Column(Integer, primary_key=True, index=True)
+    ioc_id = Column(Integer, ForeignKey("iocs.id", ondelete="CASCADE"), nullable=False, index=True)
+
+    provider = Column(Text, nullable=False)  # "abuseipdb"
+
+    score = Column(Integer, nullable=True)
+    total_reports = Column(Integer, nullable=True)
+
+    country_code = Column(Text, nullable=True)
+    isp = Column(Text, nullable=True)
+    domain = Column(Text, nullable=True)
+    usage_type = Column(Text, nullable=True)
+
+    last_reported_at = Column(DateTime(timezone=True), nullable=True)
+
+    raw_json = Column(JSONB, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
