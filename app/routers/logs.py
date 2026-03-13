@@ -11,6 +11,9 @@ from app.models import LogEvent
 from app.schemas import LogIngest, LogOut
 from app.siem.log_parser import parse_line
 
+# NEW: correlate only new logs
+from app.services.correlation import correlate_log_ids
+
 router = APIRouter()
 
 
@@ -21,13 +24,15 @@ def ingest_logs(payload: LogIngest, db: Session = Depends(get_db)):
     - Accepts { source: "apache", lines: ["...", "..."] }
     - Parses each line
     - Inserts into logs table
-    - Returns counts + parse errors
+    - Auto-runs correlation on newly inserted logs
+    - Returns counts + parse errors + alerts_created
     """
     if not payload.lines:
         raise HTTPException(status_code=400, detail="No lines provided")
 
     inserted = 0
     errors = []
+    new_log_ids: List[int] = []
 
     for idx, line in enumerate(payload.lines):
         if not line or not line.strip():
@@ -51,15 +56,20 @@ def ingest_logs(payload: LogIngest, db: Session = Depends(get_db)):
             evt.timestamp = parsed["timestamp"]
 
         db.add(evt)
+        db.flush()  # assigns evt.id without committing
+        new_log_ids.append(evt.id)
         inserted += 1
 
     db.commit()
+    # NEW: auto-run correlation for only the new logs
+    alerts_created = correlate_log_ids(db, new_log_ids)
 
     return {
         "source": payload.source,
         "received": len(payload.lines),
         "inserted": inserted,
         "errors": errors,
+        "alerts_created": alerts_created,
     }
 
 
@@ -86,7 +96,6 @@ def list_logs(
 
     items: List[LogEvent] = db.execute(stmt).scalars().all()
 
-    # Return a SOC-friendly wrapper
     return {
         "count": len(items),
         "items": [LogOut.model_validate(x).model_dump() for x in items],

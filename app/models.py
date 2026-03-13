@@ -13,7 +13,11 @@ class IOC(Base):
     confidence = Column(Integer, default=50)                  # 0-100
     first_seen = Column(DateTime(timezone=True), server_default=func.now())
     last_seen = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
-
+    status = Column(String(20), default="open", index=True)
+    assigned_to = Column(String(100), nullable=True)
+    analyst_notes = Column(Text, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
 
 class LogEvent(Base):
     __tablename__ = "logs"
@@ -73,9 +77,16 @@ class Alert(Base):
     __tablename__ = "alerts"
 
     id = Column(Integer, primary_key=True, index=True)
-    log_id = Column(Integer, ForeignKey("logs.id"), nullable=True)
-    ioc_id = Column(Integer, ForeignKey("iocs.id"), nullable=True)
 
-    alert_type = Column(String, nullable=False)   # "IOC_MATCH"
-    severity = Column(String, default="medium")
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), index=True)
+    log_id = Column(Integer, ForeignKey("logs.id"), nullable=False)
+    ioc_id = Column(Integer, ForeignKey("iocs.id"), nullable=False)
+
+    alert_type = Column(String(50), default="IOC_MATCH", index=True)
+    severity = Column(String(10), default="medium", index=True)  # low/medium/high
+
+    status = Column(String(20), default="open", index=True)      # open/investigating/closed
+    assigned_to = Column(String(100), nullable=True)             # optional
+    analyst_notes = Column(Text, nullable=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

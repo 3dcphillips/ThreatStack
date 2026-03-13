@@ -4,30 +4,30 @@ from app.models import IOC, LogEvent, Alert
 
 IP_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
 
-def correlate_logs(db: Session) -> int:
+def correlate_log_ids(db: Session, log_ids: list[int]) -> int:
+    if not log_ids:
+        return 0
+
     iocs = db.query(IOC).all()
-    logs = db.query(LogEvent).all()
-
     ioc_map = {str(i.value).strip(): i for i in iocs if i.value}
-    alerts_created = 0
 
+    logs = db.query(LogEvent).filter(LogEvent.id.in_(log_ids)).all()
+
+    alerts_created = 0
     for log in logs:
         candidates = set()
 
-        # Best signal: parsed_ip from your ingest pipeline
-        if getattr(log, "parsed_ip", None):
+        if log.parsed_ip:
             candidates.add(str(log.parsed_ip).strip())
 
-        # Fallback: scan the message
-        msg = getattr(log, "message", "") or ""
-        candidates.update(IP_RE.findall(msg))
+        if log.message:
+            candidates.update(IP_RE.findall(log.message))
 
         for val in candidates:
             ioc = ioc_map.get(val)
             if not ioc:
                 continue
 
-            # prevent duplicates
             exists = (
                 db.query(Alert)
                 .filter(Alert.log_id == log.id, Alert.ioc_id == ioc.id)
@@ -46,3 +46,11 @@ def correlate_logs(db: Session) -> int:
 
     db.commit()
     return alerts_created
+
+def correlate_logs(db: Session) -> int:
+    """
+    Backwards-compatible correlation:
+    correlate across ALL logs by reusing correlate_log_ids.
+    """
+    log_ids = [row[0] for row in db.query(LogEvent.id).all()]
+    return correlate_log_ids(db, log_ids)

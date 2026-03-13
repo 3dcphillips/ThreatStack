@@ -5,6 +5,7 @@ import app.models
 from app.database import get_db
 from app.services.correlation import correlate_logs
 from app.routers import iocs, logs, alerts, cves, enrich
+from app.routers.alerts import router as alerts_router
 
 app = FastAPI(
     title="ThreatStack",

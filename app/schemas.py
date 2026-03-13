@@ -1,5 +1,5 @@
 # app/schemas.py
-
+from pydantic import BaseModel, Field
 from datetime import datetime
 from typing import Any, Dict, Optional, Literal
 
@@ -137,3 +137,24 @@ class LogOut(BaseModel):
     message: str
     parsed_ip: Optional[str] = None
     event_type: Optional[str] = None
+
+class AlertUpdate(BaseModel):
+    status: Optional[str] = Field(
+        default=None,
+        pattern="^(open|in_progress|closed|false_positive)$"
+    )
+    assigned_to: Optional[str] = None
+    analyst_notes: Optional[str] = None
+
+
+class AlertOut(BaseModel):
+    id: int
+    log_id: int
+    ioc_id: int
+    created_at: datetime
+    status: str
+    assigned_to: Optional[str] = None
+    analyst_notes: Optional[str] = None
+
+    class Config:
+        from_attributes = True
